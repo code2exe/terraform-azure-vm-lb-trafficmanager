@@ -62,7 +62,7 @@ resource "azurerm_network_security_group" "nsg" {
 
 
 resource "azurerm_storage_account" "storage" {
-    name                        = "orzid${var.location}storage"
+    name                        = "johndoe${var.location}storage"
     resource_group_name         = azurerm_resource_group.rg.name
     location                    = var.location
     account_replication_type    = "LRS"

@@ -1,0 +1,7 @@
+subscription_id = "******"
+tenant_id       = "******"
+location        = "eastus"
+north_location  = "northeurope"
+prefix          = "********"
+vm_username = "*********"
+vm_password = "**********"

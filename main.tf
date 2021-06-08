@@ -2,14 +2,20 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "2.60.0"
+      version = "2.62.0"
     }
   }
 }
 provider "azurerm" {
-  features {}
+  features {
+    key_vault {
+      purge_soft_delete_on_destroy = true
+    }
+  }
   subscription_id            = var.subscription_id
   tenant_id                  = var.tenant_id
+  client_id                  = var.client_id
+  client_secret              = var.client_secret
   skip_provider_registration = true
 }
 resource "azurerm_resource_group" "management" {
@@ -52,7 +58,8 @@ module "east" {
   prefix   = "${var.prefix}-eastus"
   location = var.location
   username = var.vm_username
-  password = var.vm_password
+  user_object_id = var.user_object_id
+  
 }
 
 # Create Traffic Manager - East End Point
@@ -64,16 +71,13 @@ resource "azurerm_traffic_manager_endpoint" "tm-endpoint-east" {
   target_resource_id  = module.east.public_ip_address_id
 }
 
-
-
 module "north" {
   source   = "./modules/resources"
   prefix   = "${var.prefix}-northeurope"
   location = var.north_location
   username = var.vm_username
-  password = var.vm_password
+  user_object_id = var.user_object_id
 }
-
 
 # Create Traffic Manager - North End Point
 resource "azurerm_traffic_manager_endpoint" "tm-endpoint-north" {

@@ -15,6 +15,6 @@ variable "username" {
   description = "Azure VM Username"
 }
 
-variable "password" {
-  description = "Azure VM Password"
+variable "user_object_id" {
+  description = "User's Object ID from Azure Portal"
 }

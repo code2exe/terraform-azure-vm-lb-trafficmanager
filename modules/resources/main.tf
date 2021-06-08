@@ -36,14 +36,14 @@ resource "azurerm_network_security_group" "nsg" {
   security_rule = [ 
     {
     access = "Allow"
-    description = "Allow HTTP"
+    description = "Allow Web Service"
     destination_address_prefix = "*"
     destination_address_prefixes = []
     destination_application_security_group_ids = []
-    destination_port_range = "80"
-    destination_port_ranges = []
+    destination_port_range = ""
+    destination_port_ranges = [80, 443]
     direction = "Inbound"
-    name = "Allow HTTP"
+    name = "Allow HTTP(S)"
     priority = 100
     protocol = "*"
     source_address_prefix = "*"
@@ -62,7 +62,7 @@ resource "azurerm_network_security_group" "nsg" {
 
 
 resource "azurerm_storage_account" "storage" {
-    name                        = "johndoe${var.location}storage"
+    name                        = "orzid${var.location}storage"
     resource_group_name         = azurerm_resource_group.rg.name
     location                    = var.location
     account_replication_type    = "LRS"
@@ -172,6 +172,170 @@ resource "azurerm_lb_rule" "lb_rule" {
   backend_port                   = "80"
 }
 
+resource "tls_private_key" "myssh" {
+  algorithm = "RSA"
+  rsa_bits = 4096
+}
+
+
+
+resource "azurerm_ssh_public_key" "default" {
+  name = "${var.prefix}_sshkey"
+  resource_group_name = azurerm_resource_group.rg.name
+  location = azurerm_resource_group.rg.location
+  public_key = tls_private_key.myssh.public_key_openssh
+  tags = {
+    env = var.tag_name
+  }
+}
+
+data "azurerm_client_config" "current" {}
+
+resource "azurerm_key_vault" "vault" {
+  name                        = "${var.prefix}-kv"
+  location                    = azurerm_resource_group.rg.location
+  resource_group_name         = azurerm_resource_group.rg.name
+  enabled_for_disk_encryption = true
+  tenant_id                   = data.azurerm_client_config.current.tenant_id
+  soft_delete_retention_days  = 7
+  purge_protection_enabled    = false
+  enabled_for_template_deployment = true
+  enabled_for_deployment      = true
+
+  sku_name = "standard"
+
+  access_policy {
+    tenant_id = data.azurerm_client_config.current.tenant_id
+    object_id = data.azurerm_client_config.current.object_id
+  
+  
+
+    certificate_permissions = [
+      "create",
+      "delete",
+      "deleteissuers",
+      "get",
+      "getissuers",
+      "import",
+      "list",
+      "listissuers",
+      "managecontacts",
+      "manageissuers",
+      "setissuers",
+      "update",
+    ]
+
+    key_permissions = [
+      "backup",
+      "create",
+      "decrypt",
+      "delete",
+      "encrypt",
+      "get",
+      "import",
+      "list",
+      "purge",
+      "recover",
+      "restore",
+      "sign",
+      "unwrapKey",
+      "update",
+      "verify",
+      "wrapKey",
+    ]
+
+    secret_permissions = [
+      "backup",
+      "delete",
+      "get",
+      "list",
+      "purge",
+      "recover",
+      "restore",
+      "set",
+    ]
+
+    storage_permissions = [
+      "get",
+    ]
+  }
+
+   access_policy {
+    tenant_id = data.azurerm_client_config.current.tenant_id
+    object_id = var.user_object_id 
+
+    certificate_permissions = [
+      "create",
+      "delete",
+      "deleteissuers",
+      "get",
+      "getissuers",
+      "import",
+      "list",
+      "listissuers",
+      "managecontacts",
+      "manageissuers",
+      "setissuers",
+      "update",
+    ]
+
+    key_permissions = [
+      "backup",
+      "create",
+      "decrypt",
+      "delete",
+      "encrypt",
+      "get",
+      "import",
+      "list",
+      "purge",
+      "recover",
+      "restore",
+      "sign",
+      "unwrapKey",
+      "update",
+      "verify",
+      "wrapKey",
+    ]
+
+    secret_permissions = [
+      "backup",
+      "delete",
+      "get",
+      "list",
+      "purge",
+      "recover",
+      "restore",
+      "set",
+    ]
+
+    storage_permissions = [
+      "get",
+    ]
+  }
+
+
+
+  network_acls {
+    default_action = "Allow"
+    bypass         = "AzureServices"
+  }
+
+  tags = {
+    env = var.tag_name
+  }
+}
+
+resource "azurerm_key_vault_secret" "ssh_value" {
+  name         = "${var.prefix}-prikey"
+  value        = tls_private_key.myssh.private_key_pem
+  key_vault_id = azurerm_key_vault.vault.id
+
+  tags = {
+    env = var.tag_name
+  }
+}
+
 data "template_file" "cloud-init" {
   template = file("${path.module}/scripts/command.sh")
 }
@@ -186,10 +350,13 @@ resource "azurerm_linux_virtual_machine_scale_set" "vmss" {
   sku                 = "Standard_B1ms"
   instances           = 2
   admin_username      = var.username
-  admin_password      = var.password
   computer_name_prefix = "${var.prefix}-vm"
-  disable_password_authentication = false
   custom_data = base64encode(data.template_file.cloud-init.rendered)
+
+  admin_ssh_key {
+    username = var.username
+    public_key = tls_private_key.myssh.public_key_openssh
+  }
   boot_diagnostics {
       storage_account_uri = azurerm_storage_account.storage.primary_blob_endpoint
     }
